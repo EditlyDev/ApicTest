@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APIC - Image to Video</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: black;
+            color: white;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        input, textarea, button {
+            display: block;
+            width: 100%;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid white;
+            border-radius: 5px;
+            background-color: #1c1c1c;
+            color: white;
+        }
+
+        button {
+            background-color: white;
+            color: black;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: black;
+            color: white;
+            border: 1px solid white;
+        }
+
+        #result {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid white;
+            border-radius: 5px;
+            background-color: #1c1c1c;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>APIC - Image to Video</h1>
+        <form id="videoForm">
+            <label for="promptImage">Prompt Image URL:</label>
+            <input type="url" id="promptImage" placeholder="Enter image URL (e.g., http://example.com)" required>
+
+            <label for="promptText">Prompt Text:</label>
+            <textarea id="promptText" rows="3" placeholder="Enter text to guide video generation"></textarea>
+
+            <label for="duration">Duration (in seconds):</label>
+            <input type="number" id="duration" value="5" min="1" max="60" required>
+
+            <label for="ratio">Aspect Ratio:</label>
+            <input type="text" id="ratio" value="1280:768" required>
+
+            <button type="submit">Generate Video</button>
+        </form>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const apiKey = "key_08e75ae6a1e3fcc0f1a990e0e8e26a389aa8fc29fa29065a25f977c91cfed0cd605ab893b40193d7efead5de83235e366a2075fdf4a2ede4c068c31878ada3af";
+        const runwayBaseUrl = "https://api.dev.runwayml.com/v1";
+
+        document.getElementById("videoForm").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            
+            const promptImage = document.getElementById("promptImage").value;
+            const promptText = document.getElementById("promptText").value;
+            const duration = document.getElementById("duration").value;
+            const ratio = document.getElementById("ratio").value;
+
+            const resultDiv = document.getElementById("result");
+            resultDiv.innerHTML = "Submitting your request...";
+
+            try {
+                // Step 1: Submit video generation request
+                const response = await fetch(`${runwayBaseUrl}/image_to_video`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${apiKey}`,
+                        "X-Runway-Version": "2024-11-06"
+                    },
+                    body: JSON.stringify({
+                        promptImage,
+                        seed: Math.floor(Math.random() * 4294967295), // Random seed
+                        model: "gen3a_turbo",
+                        promptText,
+                        watermark: false,
+                        duration: parseInt(duration),
+                        ratio
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || "Error submitting request");
+                }
+
+                const taskId = data.id;
+                resultDiv.innerHTML = `Request submitted. Task ID: ${taskId}<br>Polling for status...`;
+
+                // Step 2: Poll task status
+                let status = "PENDING";
+                while (status === "PENDING" || status === "IN_PROGRESS") {
+                    await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds
+                    const statusResponse = await fetch(`${runwayBaseUrl}/tasks/${taskId}`, {
+                        headers: {
+                            "Authorization": `Bearer ${apiKey}`,
+                            "X-Runway-Version": "2024-11-06"
+                        }
+                    });
+
+                    const statusData = await statusResponse.json();
+                    status = statusData.status;
+
+                    if (status === "COMPLETED") {
+                        resultDiv.innerHTML = `Task completed! <a href="${statusData.result.video_url}" target="_blank">Download Video</a>`;
+                        return;
+                    } else if (status === "FAILED") {
+                        resultDiv.innerHTML = "Task failed. Please try again.";
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.error(error);
+                resultDiv.innerHTML = "An error occurred. Please check the console for details.";
+            }
+        });
+    </script>
+</body>
+</html>
